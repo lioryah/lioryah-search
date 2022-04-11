@@ -1,210 +1,182 @@
-#%%
+# internal methods:
 
-from typing import Iterable, List
-#import fire
-
-'''
-Methods list:
-* init_db() -> dict
-    return {} 
-
-* add_to_db(mdb:dict, token:str) -> bool
-
-* iterate_tokens(path:str)-> Iterable[str]:
-
-* find_prefix(mdb:dict, prefix: str) -> dict
-  start from root mdb and returns root for end of prefix
-
-* iterate_suffixes(mdb:dict) -> Iterable[str]
-
-* retrive_suffixes_by_prefix(mdb, prefix, limit) -> List[str]
-
-declarared for outside use api:
-* load_db(path: str = None):
-  use init_db and then if path is not None`add_to_db` 
-
-* add_to_db (from before)
-
-* get_sugestions(mdb:dict, prefix: str, limit: int)
-  * retrive_suffixes_by_prefix
+def init_db():
+    return {}
 
 
-'''
+def add_to_db(mdb:dict, token:str):
+    token_added = False
+    cur = mdb
+    for char in token:
+        if char not in cur:
+            cur[char] = {}
+        cur = cur[char]
+    if not None in cur:
+        cur[None] = None
+        token_added = True
+    return token_added
+
+"""
+O(n) where n is a token length
+"""
+
+# return bool
+# if this token is already in the db, it doesn't get added and add_to_db() returns False
+# if token is added, add_to_db() returns True
+
+def iterable_tokens(path:str):
+    with open(path, 'r') as f_tokens:
+        db_tokens = []
+        for line in f_tokens:
+            if line.endswith('\n'):
+                token = line[0:-1]
+            else:
+                token = line
+            yield token
+        return db_tokens
+
+# return iterable[str]
+
+"""
+O(n) where n is a number of tokens
+"""
 
 
-def init_db() -> dict:
-    return {} 
-
-
-def add_to_db(mdb:dict, token:str) -> bool:
-    if token == '':
-        mdb['_end'] = '_end'
-        return True
-    else:
-        first = token[0]
-        rest = token[1:] 
-        if first not in mdb:
-            mdb[first] = {}
-        add_to_db(mdb[first], rest)
-    
-
-###################
-def iterate_tokens(path:str)-> Iterable[str]:
-    pass
-
-
-def find_prefix(mdb:dict, prefix: str) -> dict:
-   # start from root mdb and returns root for end of prefix
-    if prefix == '':
-        return mdb
-    else:
-        first = prefix[0]
-        if first in mdb:
-            return find_prefix(mdb[first], prefix[1:])
-
-
-def recur_suffix(mdb:dict, end_flag=False, path_list=[]):
-    if not end_flag: 
-        
-        if '_end' in mdb:
-            end_flag = True
-            if(len(mdb.keys()) != 1):
-                mdb.pop('_end')
-            return  ''.join(path_list)
+def find_prefix(mdb:dict, prefix:str):
+    cur = mdb
+    for char in prefix:
+        if char in cur:
+            cur = cur[char]
         else:
-            for k in mdb.keys():
-                path_list.append(k)
-                break
-    return recur_suffix(mdb[k], end_flag, path_list)
-            
+            return None
+    return cur
 
-def iterate_suffixes(mdb:dict) -> Iterable[str]:
-    yield recur_suffix(mdb)
+"""
+O(n) where n is a number of characters in a prefix
+"""
+    
+# return dict
+# start from root mdb and returns root for end of prefix
 
 
-def iterate_suffixes2(mdb:dict, end_flag=False, path_list=[]) -> Iterable[str]:
-    parent_dict = mdb
-    for key_curr_dict in parent_dict.keys():
-        curr_dict = parent_dict[key_curr_dict]
-        path_list.append(key_curr_dict)
-        while not end_flag: 
-            
-            if '_end' in curr_dict :
-                end_flag = True
-                
-                #if(len(curr_dict.keys()) != 1):
-                #if len(curr_dict) != 1:
-                #    curr_dict.pop('_end')
-                #else:
-                
-                
-                yield  ''.join(path_list)
-                
-                curr_dict = remove_path_from_db(parent_dict,path_list)
+# iterative implementation of trie traversal with a branch buffer
 
-                #curr_dict.pop('_end')
-                end_flag = False
-                break
-                '''
-                if len(curr_dict) == 1:
+def iterate_suffixes(mdb: dict):
+    suffixes = []
+    branch_buffer = {}
+
+    suffix = []
+    cur = mdb
+
+    while cur:
+        # when we reach the suffix end
+        if cur == {None: None}:
+            # we turn the suffix into a string then yield it
+            yield ''.join(suffix)
+            # if branch buffer is not empty
+            # we extract the last added path to the branch and the branching node's children iterator from the buffer
+            if branch_buffer:
+                branch_path, branch_children = branch_buffer.popitem()
+                # when the iterator over node's children gets exhausted it will return NotImplements as a marker
+                child = next(branch_children, NotImplemented)
+
+                # if child == None, the branch_path is a complete suffix itself, and we yield it now
+                if child == None:
+                    yield branch_path
+                    child = next(branch_children, NotImplemented)
+
+                # if the branch_children iterator is exhausted
+                while child == NotImplemented:
+                    # and there is something in the branch_buffer
+                    if branch_buffer:
+                        # we pop the last item from the branch buffer
+                        branch_path, branch_children = branch_buffer.popitem()
+                        # get the current child and check once again, maybe this branch_children iterator is exhausted too
+                        child = next(branch_children, NotImplemented)
+                    else:
+                        break
+
+                # if the iterator have already got exhausted on previous steps, we don't return it to the branch buffer
+                # we must break from branch_buffer processing here to prevent passing NotImplemented as a key to the cur
+                if child == NotImplemented:
                     break
                 else:
-                    continue
-                '''
-            #if curr_dict == {}:
-            #    curr_dict.pop(k)
-            for k in curr_dict.keys():
-                
-                parent_dict = curr_dict
-                curr_dict = curr_dict[k]
-                path_list.append(k)
-                
+                    branch_buffer[branch_path] = branch_children
+
+                # here we step through all the branch path chars down the sub-trie to get to the branching node
+                # also we convert the branch_path to the beginning of the suffix
+                # suffix is a list, not a string, to speed up appending characters to it
+                cur = mdb
+                suffix = []
+                for char in branch_path:
+                    cur = cur[char]
+                    suffix.append(char)
+
+                # and here we switch to the current branch
+                if child == None:
+                    cur = {None: None}
+                else:
+                    suffix.append(child)
+                    cur = cur[child]
+            # to prevent an infinite loop if the branch buffer is empty
+            else:
                 break
 
+        # the keys of the cur are the children of the current node, and we get an iterator over them
+        children = iter(cur.keys())
+        children_count = len(cur.keys())
+        child = next(children)
 
-def remove_path_from_db (db:dict, path:List[str])->dict:
-    '''
-    parent_db = db
+        # if cursor meets branch, it writes the node information to the buffer
+        # suffix serves as a path to the node in a trie and children is the node children iterator
+        if children_count > 1:
+            branch_path = ''.join(suffix)
+            branch_buffer[branch_path] = children
+        if child == None:
+            cur = {None:None}
+        else:
+            suffix.append(child)
+            cur = cur[child]
 
-    if '_end' in parent_db[path[0]] and len(path) > 1:
-        return db.pop(path[0])
-    
+    return suffixes
+
+    # return iterable[str]
+
+
+def retrive_suffixes_by_prefix(mdb:dict, prefix:str, limit:int=10):
+    subtrie = find_prefix(mdb=mdb, prefix=prefix)
+    if subtrie:
+        itsuf = iterate_suffixes(subtrie)
+        if not limit:
+            suffixes = [suf for suf in itsuf]
+        else:
+            suffixes = []
+            for suf in itsuf:
+                suffixes.append(suf)
+                limit -= 1
+                if limit == 0:
+                    return suffixes
+        return suffixes
     else:
-        db = db[path[0]]
-        path = path[1:]
-        return remove_path_from_db(db,path).popitem()
-        '''
+        return None
+
+    # return list[str]
+
+# external API methods:
+
+def load_db(path:str=None):
+    mdb = init_db()
+    if path:
+        itokens = iterable_tokens(path=path)
+        for itoken in itokens:
+            add_to_db(mdb=mdb, token=itoken)
+    return mdb
 
 
-    '''
-    if len(path) == 1:
-        return db.pop(path[0])
-    '''
-
-    curr_db = db   
-    
-    for i in range(len(path)):
-        curr_db = db[path[i]]
-    
-    if '_end' in curr_db:
-        curr_db.pop('_end')
-
-
-    '''
-    if len(path) == 1:
-        return db.pop('_end')
-'''
-
-def retrive_suffixes_by_prefix(mdb:dict, prefix:str, limit:int) -> List[str]:
-    pass
-
-
-# declarared for outside use api
-
-def get_sugestions(mdb:dict, prefix: str, limit: int):
-    completions = []
-    suffix_dict = find_prefix(mdb,prefix)
-    if suffix_dict == {}:
-        return completions
-    if suffix_dict == {'_end':'_end'}:
-        return ['']
-
-    single_suffix = iterate_suffixes2(suffix_dict)
-    i=0
-    while i<limit:
-        completions.append(next(single_suffix))
-        print(completions[i])
-        i+=1
-    print(completions)
-    return completions
-# retrive_suffixes_by_prefix
-    
-def load_db(path: str = None):
-    db = init_db()
-    if path is not None:
-        ftokens = open(path, "r")
-        for line in ftokens:
-            if line.endswith('\n'): 
-                token = line[:-1]
-            else: 
-                token = line
-            add_to_db(db, token)
-    return db
-
-'''
-def main_():
-    #fire.Fire()
-    my_db = load_db('lioryah_search/tokens1.txt')
-    print(my_db)
-
-if __name__ == '__main__':
-    main_() 
-'''
-
-
-#%%
-my_db = load_db('tokens1.txt')
-print(my_db)
-
-get_sugestions(my_db, 'ba', 4)
-# %%
+def get_suggestions(mdb:dict, prefix:str, limit:int=10):
+    suffixes = retrive_suffixes_by_prefix(mdb=mdb, prefix=prefix, limit=limit)
+    if suffixes:
+        suggestions = [prefix + suffix for suffix in suffixes]
+        return suggestions
+    else:
+        return []
