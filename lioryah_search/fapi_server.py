@@ -6,7 +6,6 @@ import uvicorn
 from fastapi import FastAPI
 import lib_search_sdk
 from urllib.parse import unquote
-import lib_search_sdk
 from pathlib import Path
 
 _me_parent = Path(__file__).absolute().parent
