@@ -8,7 +8,7 @@ import lib_search_sdk
 from urllib.parse import unquote
 from pathlib import Path
 
-_me_parent = Path(__file__).absolute().parent
+_me_parent = Path(__file__).absolute().parent.parent
 
 app = FastAPI()
 
@@ -59,7 +59,7 @@ def read_root():
     return res
 
 
-# fixed this method to take a path as a query like this: host/load_db?path=folder/token_file.txt
+# fixed this method to take a path as a query like this: host   /load_db?path=folder/token_file.txt
 @app.get("/load_db")
 def load_db(path: str):
     p = unquote(path)

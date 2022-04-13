@@ -170,7 +170,6 @@ def load_db(path:str=None):
         itokens = iterable_tokens(path=path)
         for itoken in itokens:
             add_to_db(mdb=mdb, token=itoken)
-    print(mdb)
     return mdb
 
 
