@@ -3,7 +3,7 @@
 
 from typing import Optional
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI 
 import lib_search_sdk
 from urllib.parse import unquote
 from pathlib import Path
@@ -45,7 +45,7 @@ def read_root():
         "msg": {"Hello": "World"},
         "menu": {
             "recreate": [
-              "/load_db?path=2466_tokens.txt",
+              "/load_db?path=data/2466_tokens.txt",
             ],
             "update": [
               "/add_to_db/token1",
